@@ -149,7 +149,7 @@ opencursor/
   overlay.py         # GUI overlay (hidden from screen capture)
   debug_session.py   # Debug session management
   ground.py          # Standalone visual grounding test tool
-  models/
+  adapters/
     base.py          # Abstract adapter base class
     qwen.py          # Qwen adapter (OpenRouter)
     openai_gpt.py    # GPT-4o adapter (OpenAI API, tool_use)
@@ -160,9 +160,9 @@ opencursor/
 
 ## Adding a New Model Adapter
 
-1. Create a new file in `models/` that extends `ModelAdapter` from `models/base.py`
+1. Create a new file in `adapters/` that extends `ModelAdapter` from `adapters/base.py`
 2. Implement `build_client()`, `_call_api()`, and `get_prompt_overrides()`
-3. Register it in `models/__init__.py`
+3. Register it in `adapters/__init__.py`
 
 The base class provides helpers for building OpenRouter clients, constructing message arrays, retry logic, debug output, and response packaging.
 

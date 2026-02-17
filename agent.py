@@ -9,7 +9,7 @@ import time
 from actions import execute_action
 from config import load_config
 from debug_session import DebugSession
-from models import get_adapter
+from adapters import get_adapter
 from prompts import build_system_prompt
 from screenshot import take_screenshot
 

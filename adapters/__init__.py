@@ -1,10 +1,10 @@
 """Model adapter registry."""
 
-from models.claude import ClaudeAdapter
-from models.gemini import GeminiAdapter
-from models.generic import GenericAdapter
-from models.openai_gpt import OpenAIGPTAdapter
-from models.qwen import QwenAdapter
+from adapters.claude import ClaudeAdapter
+from adapters.gemini import GeminiAdapter
+from adapters.generic import GenericAdapter
+from adapters.openai_gpt import OpenAIGPTAdapter
+from adapters.qwen import QwenAdapter
 
 MODEL_REGISTRY = {
     "qwen": QwenAdapter,

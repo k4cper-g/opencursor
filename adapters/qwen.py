@@ -1,14 +1,14 @@
-"""Gemini adapter — Google Gemini via OpenRouter with XML prompting."""
+"""Qwen adapter — Qwen 3.5 Plus via OpenRouter."""
 
 from PIL import Image
 
-from models.base import ModelAdapter, ModelResponse
+from adapters.base import ModelAdapter, ModelResponse
 from parsing import parse_response
 
 
-class GeminiAdapter(ModelAdapter):
-    name = "gemini"
-    default_model_id = "google/gemini-2.5-pro-preview"
+class QwenAdapter(ModelAdapter):
+    name = "qwen"
+    default_model_id = "qwen/qwen3.5-plus-02-15"
     default_base_url = "https://openrouter.ai/api/v1"
 
     def build_client(self, config: dict):
@@ -23,14 +23,17 @@ class GeminiAdapter(ModelAdapter):
             messages=messages,
             max_tokens=config.get("max_tokens", 4096),
             temperature=config.get("temperature", 0),
+            extra_body={"chat_template_kwargs": {"enable_thinking": False}},
         )
 
         choice = resp.choices[0]
         raw = choice.message.content.strip() if choice.message.content else ""
+        reasoning = getattr(choice.message, "reasoning_content", None) or getattr(choice.message, "reasoning", None)
 
         self._print_debug(
             finish_reason=choice.finish_reason,
             usage=vars(resp.usage) if resp.usage else None,
+            reasoning=reasoning,
             raw=raw,
         )
 

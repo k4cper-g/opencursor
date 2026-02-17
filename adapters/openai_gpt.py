@@ -5,7 +5,7 @@ import sys
 
 from PIL import Image
 
-from models.base import ModelAdapter, ModelResponse
+from adapters.base import ModelAdapter, ModelResponse
 from parsing import parse_response, parse_response_tool_use
 from screenshot import encode_image
 
