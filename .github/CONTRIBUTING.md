@@ -10,11 +10,11 @@ This project and everyone participating in it is governed by the [OpenCursor Cod
 
 ## I Have a Question
 
-Before you ask a question, it's best to search for existing [Issues](https://github.com/alteredorange/opencursor/issues) that might help you. If you find a suitable issue and still need clarification, you can write your question in that issue.
+Before you ask a question, it's best to search for existing [Issues](https://github.com/k4cper-g/opencursor/issues) that might help you. If you find a suitable issue and still need clarification, you can write your question in that issue.
 
 If you still feel the need to ask a question:
 
-- Open an [Issue](https://github.com/alteredorange/opencursor/issues/new)
+- Open an [Issue](https://github.com/k4cper-g/opencursor/issues/new)
 - Provide as much context as you can about what you're running into
 - Include your OS, Python version, and model adapter you're using
 
@@ -26,7 +26,7 @@ A good bug report shouldn't leave others needing to chase you down for more info
 
 - Make sure that you are using the latest version
 - Confirm that your issue is actually a bug and not a configuration error (e.g., missing API keys, unsupported model)
-- Check if there is already a bug report for your issue in the [issue tracker](https://github.com/alteredorange/opencursor/issues)
+- Check if there is already a bug report for your issue in the [issue tracker](https://github.com/k4cper-g/opencursor/issues)
 - Collect relevant information:
   - OS and Python version
   - Model adapter and model ID being used
@@ -38,7 +38,7 @@ A good bug report shouldn't leave others needing to chase you down for more info
 
 ### Enhancement Suggestions
 
-Enhancement suggestions are tracked as [GitHub issues](https://github.com/alteredorange/opencursor/issues).
+Enhancement suggestions are tracked as [GitHub issues](https://github.com/k4cper-g/opencursor/issues).
 
 - Use a **clear and descriptive title** for the issue
 - Provide a **step-by-step description** of the suggested enhancement
