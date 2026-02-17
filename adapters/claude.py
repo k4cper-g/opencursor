@@ -1,4 +1,4 @@
-"""Claude adapter — Anthropic API with tool_use for structured actions."""
+"""Claude adapter — Anthropic API (Sonnet 4.5) with tool_use for structured actions."""
 
 import os
 import sys
@@ -123,7 +123,7 @@ TOOLS = [
 
 class ClaudeAdapter(ModelAdapter):
     name = "claude"
-    default_model_id = "claude-sonnet-4-20250514"
+    default_model_id = "claude-sonnet-4-5-20250929"
 
     def build_client(self, config: dict):
         try:

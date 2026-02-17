@@ -23,9 +23,11 @@ The agent stops when the model signals `done` or when `--max-steps` is reached.
 |-----------|--------------------------------|------------------|--------------------------------|
 | `qwen`    | Qwen 3.5 Plus                  | OpenRouter       | *(included)*                   |
 | `gpt4o`   | GPT-4o                         | OpenAI (direct)  | *(included)*                   |
-| `claude`  | Claude Sonnet 4                | Anthropic        | `pip install anthropic`        |
-| `gemini`  | Gemini 2.5 Pro                 | OpenRouter       | *(included)*                   |
+| `claude`  | Claude Sonnet 4.5              | Anthropic        | `pip install anthropic`        |
+| `gemini`  | Gemini 3 Flash                 | OpenRouter       | *(included)*                   |
 | `generic` | Any vision model (you choose)  | OpenRouter / any | *(included)*                   |
+
+**Recommended**: Qwen 3.5 Plus offers the best balance of visual grounding accuracy and cost for computer-use tasks.
 
 The `generic` adapter works with any OpenAI-compatible API, including local models via Ollama, LM Studio, etc.
 

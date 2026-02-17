@@ -1,4 +1,4 @@
-"""Gemini adapter — Google Gemini via OpenRouter with XML prompting."""
+"""Gemini adapter — Google Gemini 3 Flash via OpenRouter with XML prompting."""
 
 from PIL import Image
 
@@ -8,7 +8,7 @@ from parsing import parse_response
 
 class GeminiAdapter(ModelAdapter):
     name = "gemini"
-    default_model_id = "google/gemini-2.5-pro-preview"
+    default_model_id = "google/gemini-3-flash-preview"
     default_base_url = "https://openrouter.ai/api/v1"
 
     def build_client(self, config: dict):
