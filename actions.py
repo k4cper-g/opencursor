@@ -29,12 +29,13 @@ def execute_action(action: dict, img_w: int, img_h: int) -> str:
             return f"ERROR: {name} action missing <box> coordinates"
         cx, cy = box_to_center(action["box"], img_w, img_h)
         target = action.get("target", "element")
+        pyautogui.moveTo(cx, cy, duration=0.4)
         if name == "click":
-            pyautogui.click(cx, cy)
+            pyautogui.click()
         elif name == "double_click":
-            pyautogui.doubleClick(cx, cy)
+            pyautogui.doubleClick()
         elif name == "right_click":
-            pyautogui.rightClick(cx, cy)
+            pyautogui.rightClick()
         return f"{name} on '{target}' at ({cx}, {cy})"
 
     elif name == "type":
@@ -67,7 +68,7 @@ def execute_action(action: dict, img_w: int, img_h: int) -> str:
             return "ERROR: drag action missing <from> or <to> boxes"
         fx, fy = box_to_center(action["from_box"], img_w, img_h)
         tx, ty = box_to_center(action["to_box"], img_w, img_h)
-        pyautogui.moveTo(fx, fy)
+        pyautogui.moveTo(fx, fy, duration=0.4)
         time.sleep(0.15)
         pyautogui.mouseDown()
         try:

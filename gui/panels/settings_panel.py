@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -21,6 +22,8 @@ from gui.styles import COLORS
 
 class SettingsPanel(QWidget):
     """Model and runtime settings. Some adjustable mid-run, some only at start."""
+
+    hide_capture_toggled = Signal(bool)  # True = hidden from screenshots
 
     def __init__(self, bus: AgentEventBus, bridge: EventBridge, config: dict, parent=None):
         super().__init__(parent)
@@ -91,6 +94,12 @@ class SettingsPanel(QWidget):
         self._debug_check.toggled.connect(self._on_debug_toggled)
         layout.addRow(self._debug_check)
 
+        # Capture-hide toggle
+        self._hide_capture_check = QCheckBox("Hide overlay from screenshots")
+        self._hide_capture_check.setChecked(config.get("hide_from_capture", True))
+        self._hide_capture_check.toggled.connect(self._on_hide_capture_toggled)
+        layout.addRow(self._hide_capture_check)
+
         layout.addRow(QWidget())  # spacer
 
         # Track startup-only widgets for locking
@@ -120,6 +129,7 @@ class SettingsPanel(QWidget):
         overrides["max_steps"] = self._max_steps_spin.value()
         overrides["temperature"] = self._temp_spin.value()
         overrides["debug"] = self._debug_check.isChecked()
+        overrides["hide_from_capture"] = self._hide_capture_check.isChecked()
         return overrides
 
     # --- Live setting forwarding (uses current bus) ---
@@ -135,3 +145,7 @@ class SettingsPanel(QWidget):
 
     def _on_debug_toggled(self, checked):
         self._bus.set_live_setting("debug", checked)
+
+    def _on_hide_capture_toggled(self, checked):
+        self._bus.set_live_setting("hide_from_capture", checked)
+        self.hide_capture_toggled.emit(checked)

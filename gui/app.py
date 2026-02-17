@@ -62,8 +62,15 @@ class Application(QObject):
         # Hide config, show overlay
         self._config_window.hide()
 
-        self._overlay = OverlayWindow(self._bus, self._bridge)
+        hide_capture = run_config.get("hide_from_capture", True)
+        self._overlay = OverlayWindow(self._bus, self._bridge,
+                                       hide_from_capture_=hide_capture)
         self._overlay.closed.connect(self._on_overlay_closed)
+
+        # Wire settings checkbox → overlay toggle (live during run)
+        self._config_window._settings.hide_capture_toggled.connect(
+            self._overlay.set_capture_hidden)
+
         self._overlay.show()
 
         # Start agent thread

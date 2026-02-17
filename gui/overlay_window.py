@@ -3,10 +3,11 @@
 import time
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QAction, QFont
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
+    QMenu,
     QPushButton,
     QVBoxLayout,
     QWidget,
@@ -14,7 +15,7 @@ from PySide6.QtWidgets import (
 
 from events import AgentEventBus
 from gui.bridge import EventBridge
-from gui.capture_hide import hide_from_capture
+from gui.capture_hide import hide_from_capture, show_in_capture
 from gui.styles import COLORS, DARK_STYLESHEET
 
 
@@ -30,12 +31,14 @@ class OverlayWindow(QWidget):
     OVERLAY_WIDTH = 400
     OVERLAY_HEIGHT = 260
 
-    def __init__(self, bus: AgentEventBus, bridge: EventBridge, parent=None):
+    def __init__(self, bus: AgentEventBus, bridge: EventBridge,
+                 hide_from_capture_: bool = True, parent=None):
         super().__init__(parent, Qt.WindowType.Window)
         self._bus = bus
         self._bridge = bridge
         self._paused = False
-        self._capture_hide_pending = True
+        self._capture_hide_pending = hide_from_capture_
+        self._hidden_from_capture = hide_from_capture_
 
         # Token accumulators
         self._total_prompt = 0
@@ -246,6 +249,32 @@ class OverlayWindow(QWidget):
         self._bus.request_stop()
         self.closed.emit()
         super().closeEvent(event)
+
+    # --- Context menu ---
+
+    def contextMenuEvent(self, event):
+        menu = QMenu(self)
+        menu.setStyleSheet(DARK_STYLESHEET)
+
+        hide_action = QAction("Hide from screenshots", self)
+        hide_action.setCheckable(True)
+        hide_action.setChecked(self._hidden_from_capture)
+        hide_action.triggered.connect(self._toggle_capture_hide)
+        menu.addAction(hide_action)
+
+        menu.exec(event.globalPos())
+
+    def _toggle_capture_hide(self, checked: bool):
+        self.set_capture_hidden(checked)
+
+    def set_capture_hidden(self, hidden: bool):
+        """Show or hide the overlay from screen captures."""
+        hwnd = int(self.winId())
+        if hidden:
+            hide_from_capture(hwnd)
+        else:
+            show_in_capture(hwnd)
+        self._hidden_from_capture = hidden
 
     # --- Allow dragging the frameless window ---
 
