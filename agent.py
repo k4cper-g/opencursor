@@ -17,6 +17,42 @@ from prompts import build_system_prompt
 from screenshot import take_screenshot, screenshots_are_similar
 
 
+def _actions_are_similar(a: dict, b: dict, coord_tolerance: int = 50) -> bool:
+    """Check if two parsed actions target the same thing.
+
+    Compares action type and, for coordinate-based actions, whether the
+    box centers are within `coord_tolerance` (in 0-1000 normalized space).
+    """
+    if a.get("action") != b.get("action"):
+        return False
+    a_box = a.get("box")
+    b_box = b.get("box")
+    if a_box and b_box:
+        a_cx, a_cy = (a_box[0] + a_box[2]) / 2, (a_box[1] + a_box[3]) / 2
+        b_cx, b_cy = (b_box[0] + b_box[2]) / 2, (b_box[1] + b_box[3]) / 2
+        return abs(a_cx - b_cx) <= coord_tolerance and abs(a_cy - b_cy) <= coord_tolerance
+    # Non-coordinate actions (type, hotkey): compare by content
+    if a.get("action") == "type":
+        return a.get("text") == b.get("text")
+    if a.get("action") == "hotkey":
+        return a.get("keys") == b.get("keys")
+    return True
+
+
+def _count_repeated_actions(recent: list[dict]) -> int:
+    """Count how many consecutive recent actions are similar to the last one."""
+    if len(recent) < 2:
+        return 0
+    last = recent[-1]
+    count = 1
+    for prev in reversed(recent[:-1]):
+        if _actions_are_similar(last, prev):
+            count += 1
+        else:
+            break
+    return count
+
+
 def run_agent(goal: str, config: dict, event_bus: AgentEventBus | None = None):
     adapter = get_adapter(config["model"])
     client = adapter.build_client(config)
@@ -96,9 +132,10 @@ def run_agent(goal: str, config: dict, event_bus: AgentEventBus | None = None):
     # Text-based action log replaces screenshot history
     action_log: list[str] = []
 
-    # Loop detection: track consecutive unchanged screenshots
+    # Loop detection: track repeated actions and unchanged screenshots
     prev_img = img
     unchanged_count = 0
+    recent_actions: list[dict] = []  # last N actions for repetition detection
 
     # Token / cost accumulator
     totals = {"prompt": 0, "completion": 0, "cost": 0.0, "steps": 0}
@@ -130,14 +167,22 @@ def run_agent(goal: str, config: dict, event_bus: AgentEventBus | None = None):
         if action_log:
             user_text += "\n\nCompleted actions:\n" + "\n".join(action_log)
 
-        # Loop detection: warn the model when the screen hasn't changed
-        if unchanged_count >= 2:
-            print(f"  ⚠ Screen unchanged for {unchanged_count} consecutive actions")
+        # Loop detection: warn when actions repeat or screen is unchanged
+        repeat_count = _count_repeated_actions(recent_actions)
+        loop_detected = repeat_count >= 2 or unchanged_count >= 2
+        if loop_detected:
+            reasons = []
+            if repeat_count >= 2:
+                reasons.append(f"repeated the same action {repeat_count} times")
+            if unchanged_count >= 2:
+                reasons.append(f"screen unchanged for {unchanged_count} steps")
+            reason_str = " and ".join(reasons)
+            print(f"  ⚠ Loop detected: {reason_str}")
             user_text += (
-                f"\n\n⚠ WARNING: The screen has NOT changed for {unchanged_count} "
-                f"consecutive actions. Your recent actions had no visible effect. "
+                f"\n\n⚠ WARNING: You have {reason_str}. "
+                f"Your recent actions had no visible effect. "
                 f"You MUST try a completely different approach — for example:\n"
-                f"- Use double_click instead of click\n"
+                f"- Use double_click instead of click to open/play items\n"
                 f"- Try a keyboard shortcut (e.g. Enter to play, Space to toggle)\n"
                 f"- Click a different UI element (e.g. a play button instead of the track name)\n"
                 f"- Scroll to reveal new elements\n"
@@ -204,6 +249,7 @@ def run_agent(goal: str, config: dict, event_bus: AgentEventBus | None = None):
                 print(f"  [{i+1}/{len(steps_list)}] {result}")
                 emit(EventType.STEP_ACTION_EXECUTED, step=step,
                      message=f"[{i+1}/{len(steps_list)}] {result}", action=act)
+                recent_actions.append(act)
                 seq_results.append(result)
                 if result.startswith("ERROR"):
                     print(f"  Sequence aborted due to error at step {i+1}")
@@ -259,6 +305,7 @@ def run_agent(goal: str, config: dict, event_bus: AgentEventBus | None = None):
             result = execute_action(action, w, h)
             print(f"Executed: {result}")
             emit(EventType.STEP_ACTION_EXECUTED, step=step, message=result, action=action)
+            recent_actions.append(action)
 
             dbg.log_step(step, raw_response=raw, think=action.get("think"),
                          parsed=parsed, results=[result], usage=response.get("usage"))
@@ -287,12 +334,16 @@ def run_agent(goal: str, config: dict, event_bus: AgentEventBus | None = None):
         # Loop detection: compare with previous screenshot
         if screenshots_are_similar(prev_img, img):
             unchanged_count += 1
-            # Annotate the most recent action log entry
-            if action_log and not action_log[-1].endswith("[screen unchanged]"):
+            if action_log and "[screen unchanged]" not in action_log[-1]:
                 action_log[-1] += "  [screen unchanged]"
         else:
             unchanged_count = 0
         prev_img = img
+
+        # Loop detection: annotate repeated actions in the log
+        if _count_repeated_actions(recent_actions) >= 2:
+            if action_log and "[repeated action]" not in action_log[-1]:
+                action_log[-1] += "  [repeated action]"
 
     else:
         print(f"\n*** Reached max steps ({max_steps}) without completion ***")
