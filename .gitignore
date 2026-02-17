@@ -5,3 +5,4 @@ output/
 debug/
 venv/
 .venv/
+CLAUDE.md

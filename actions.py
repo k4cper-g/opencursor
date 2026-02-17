@@ -68,7 +68,13 @@ def execute_action(action: dict, img_w: int, img_h: int) -> str:
         fx, fy = box_to_center(action["from_box"], img_w, img_h)
         tx, ty = box_to_center(action["to_box"], img_w, img_h)
         pyautogui.moveTo(fx, fy)
-        pyautogui.drag(tx - fx, ty - fy, duration=0.5)
+        time.sleep(0.15)
+        pyautogui.mouseDown()
+        try:
+            time.sleep(0.15)
+            pyautogui.moveTo(tx, ty, duration=0.5)
+        finally:
+            pyautogui.mouseUp()
         return f"drag from ({fx},{fy}) to ({tx},{ty})"
 
     elif name == "wait":

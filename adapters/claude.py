@@ -5,7 +5,7 @@ import sys
 
 from PIL import Image
 
-from adapters.base import ModelAdapter, ModelResponse
+from adapters.base import ModelAdapter, ModelResponse, StreamCallback
 from parsing import parse_response, parse_response_tool_use
 from screenshot import encode_image
 
@@ -125,6 +125,10 @@ class ClaudeAdapter(ModelAdapter):
     name = "claude"
     default_model_id = "claude-sonnet-4-5-20250929"
 
+    # Pricing: $3.00 input / $15.00 output per 1M tokens (Feb 2025)
+    # https://docs.anthropic.com/en/docs/about-claude/pricing
+    pricing = {"input": 3.00, "output": 15.00}  # $/1M tokens
+
     def build_client(self, config: dict):
         try:
             import anthropic
@@ -139,22 +143,73 @@ class ClaudeAdapter(ModelAdapter):
         return anthropic.Anthropic(api_key=api_key)
 
     def _call_api(self, client, system_prompt: str, user_text: str,
-                  screenshot: Image.Image, config: dict) -> ModelResponse:
+                  screenshot: Image.Image, config: dict,
+                  on_reasoning: StreamCallback | None = None) -> ModelResponse:
         b64 = encode_image(screenshot)
 
-        resp = client.messages.create(
-            model=self._get_model_id(config),
-            max_tokens=config.get("max_tokens", 4096),
-            system=system_prompt,
-            tools=TOOLS,
-            messages=[{
+        create_kwargs = {
+            "model": self._get_model_id(config),
+            "max_tokens": config.get("max_tokens", 4096),
+            "system": system_prompt,
+            "tools": TOOLS,
+            "messages": [{
                 "role": "user",
                 "content": [
                     {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": b64}},
                     {"type": "text", "text": user_text},
                 ],
             }],
-        )
+        }
+
+        if on_reasoning is not None:
+            raw_parts = []
+            tool_calls = []
+            reasoning_accumulated = ""
+
+            with client.messages.stream(**create_kwargs) as stream:
+                for event in stream:
+                    if event.type == "content_block_delta":
+                        if event.delta.type == "text_delta":
+                            text = event.delta.text
+                            raw_parts.append(text)
+                            reasoning_accumulated += text
+                            on_reasoning(text, reasoning_accumulated)
+
+                final_message = stream.get_final_message()
+
+            # Extract tool calls from final message
+            for block in final_message.content:
+                if block.type == "tool_use":
+                    tool_calls.append({"name": block.name, "input": block.input})
+
+            raw = "".join(raw_parts)
+            usage = final_message.usage
+
+            self._print_debug(
+                finish_reason=final_message.stop_reason,
+                usage={"input_tokens": usage.input_tokens, "output_tokens": usage.output_tokens} if usage else None,
+                raw=raw if raw else None,
+                tool_calls=tool_calls if tool_calls else None,
+            )
+
+            if tool_calls:
+                parsed = parse_response_tool_use(tool_calls)
+            else:
+                parsed = parse_response(raw)
+
+            usage_dict = None
+            if usage:
+                usage_dict = {
+                    "prompt": usage.input_tokens,
+                    "completion": usage.output_tokens,
+                    "total": usage.input_tokens + usage.output_tokens,
+                }
+
+            return self._build_response(raw or str(tool_calls), parsed, usage_dict,
+                                        reasoning=raw if tool_calls and raw else None)
+
+        # Blocking path (--no-gui)
+        resp = client.messages.create(**create_kwargs)
 
         usage = resp.usage
         raw_parts = []
@@ -188,7 +243,8 @@ class ClaudeAdapter(ModelAdapter):
                 "total": usage.input_tokens + usage.output_tokens,
             }
 
-        return self._build_response(raw or str(tool_calls), parsed, usage_dict)
+        return self._build_response(raw or str(tool_calls), parsed, usage_dict,
+                                    reasoning=raw if tool_calls and raw else None)
 
     def get_prompt_overrides(self) -> dict:
         return {

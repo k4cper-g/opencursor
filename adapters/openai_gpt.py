@@ -5,7 +5,7 @@ import sys
 
 from PIL import Image
 
-from adapters.base import ModelAdapter, ModelResponse
+from adapters.base import ModelAdapter, ModelResponse, StreamCallback
 from parsing import parse_response, parse_response_tool_use
 from screenshot import encode_image
 
@@ -152,6 +152,10 @@ class OpenAIGPTAdapter(ModelAdapter):
     name = "gpt4o"
     default_model_id = "gpt-4o"
 
+    # Pricing: $2.50 input / $10.00 output per 1M tokens (Feb 2025)
+    # https://platform.openai.com/docs/pricing
+    pricing = {"input": 2.50, "output": 10.00}  # $/1M tokens
+
     def build_client(self, config: dict):
         from openai import OpenAI
 
@@ -164,31 +168,101 @@ class OpenAIGPTAdapter(ModelAdapter):
                 sys.exit("OPENAI_API_KEY (or OPENROUTER_API_KEY with --base-url) not set in .env")
 
         base_url = config.get("base_url")
-        kwargs = {"api_key": api_key, "timeout": 120}
+        client_kwargs = {"api_key": api_key, "timeout": 120}
         if base_url:
-            kwargs["base_url"] = base_url
-            kwargs["default_headers"] = {
+            client_kwargs["base_url"] = base_url
+            client_kwargs["default_headers"] = {
                 "HTTP-Referer": "https://github.com/opencursor",
                 "X-Title": "opencursor-agent",
             }
-        return OpenAI(**kwargs)
+        return OpenAI(**client_kwargs)
 
     def _call_api(self, client, system_prompt: str, user_text: str,
-                  screenshot: Image.Image, config: dict) -> ModelResponse:
+                  screenshot: Image.Image, config: dict,
+                  on_reasoning: StreamCallback | None = None) -> ModelResponse:
         messages = self._build_openai_messages(system_prompt, user_text, screenshot)
 
-        resp = client.chat.completions.create(
-            model=self._get_model_id(config),
-            messages=messages,
-            max_tokens=config.get("max_tokens", 4096),
-            temperature=config.get("temperature", 0),
-            tools=TOOLS,
-        )
+        kwargs = {
+            "model": self._get_model_id(config),
+            "messages": messages,
+            "max_tokens": config.get("max_tokens", 4096),
+            "temperature": config.get("temperature", 0),
+            "tools": TOOLS,
+        }
+
+        if on_reasoning is not None:
+            kwargs["stream"] = True
+            kwargs["stream_options"] = {"include_usage": True}
+
+            raw_chunks: list[str] = []
+            tool_call_chunks: dict[int, dict] = {}
+            finish_reason = None
+            usage = None
+            reasoning_accumulated = ""
+
+            for chunk in client.chat.completions.create(**kwargs):
+                if not chunk.choices:
+                    if chunk.usage:
+                        usage = chunk.usage
+                    continue
+
+                delta = chunk.choices[0].delta
+
+                # Text content = reasoning for tool-use models
+                if delta.content:
+                    raw_chunks.append(delta.content)
+                    reasoning_accumulated += delta.content
+                    on_reasoning(delta.content, reasoning_accumulated)
+
+                # Accumulate tool call deltas
+                if delta.tool_calls:
+                    for tc_delta in delta.tool_calls:
+                        idx = tc_delta.index
+                        if idx not in tool_call_chunks:
+                            tool_call_chunks[idx] = {"name": "", "arguments": ""}
+                        if tc_delta.function:
+                            if tc_delta.function.name:
+                                tool_call_chunks[idx]["name"] = tc_delta.function.name
+                            if tc_delta.function.arguments:
+                                tool_call_chunks[idx]["arguments"] += tc_delta.function.arguments
+
+                if chunk.choices[0].finish_reason:
+                    finish_reason = chunk.choices[0].finish_reason
+
+            raw = "".join(raw_chunks)
+
+            if tool_call_chunks:
+                tool_calls = [
+                    {"name": tc["name"], "input": tc["arguments"]}
+                    for _, tc in sorted(tool_call_chunks.items())
+                ]
+                self._print_debug(
+                    finish_reason=finish_reason,
+                    usage=vars(usage) if usage else None,
+                    tool_calls=tool_calls,
+                )
+                parsed = parse_response_tool_use(tool_calls)
+            else:
+                raw = raw.strip()
+                self._print_debug(
+                    finish_reason=finish_reason,
+                    usage=vars(usage) if usage else None,
+                    raw=raw,
+                )
+                parsed = parse_response(raw)
+
+            raw_str = raw or str(tool_call_chunks)
+            return self._build_response(
+                raw_str, parsed, self._openai_usage_dict(usage),
+                reasoning=raw.strip() if tool_call_chunks and raw.strip() else None,
+            )
+
+        # Blocking path (--no-gui)
+        resp = client.chat.completions.create(**kwargs)
 
         choice = resp.choices[0]
         raw = choice.message.content or ""
 
-        # Parse tool calls or fall back to XML
         if choice.message.tool_calls:
             tool_calls = [
                 {"name": tc.function.name, "input": tc.function.arguments}
@@ -209,10 +283,10 @@ class OpenAIGPTAdapter(ModelAdapter):
             )
             parsed = parse_response(raw)
 
+        raw_str = raw or str(choice.message.tool_calls)
         return self._build_response(
-            raw or str(choice.message.tool_calls),
-            parsed,
-            self._openai_usage_dict(resp.usage),
+            raw_str, parsed, self._openai_usage_dict(resp.usage),
+            reasoning=raw.strip() if choice.message.tool_calls and raw.strip() else None,
         )
 
     def get_prompt_overrides(self) -> dict:
