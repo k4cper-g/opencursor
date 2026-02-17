@@ -1,11 +1,9 @@
 """
-Visual grounding test: send a screenshot + element description to Qwen 3.5 via OpenRouter,
+Visual grounding test: send a screenshot + element description to a vision model,
 get back coordinates, and draw a bounding box / X on the image.
 """
 
 import argparse
-import base64
-import io
 import json
 import os
 import re
@@ -15,7 +13,9 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from openai import OpenAI
-from PIL import Image, ImageDraw, ImageFont, ImageGrab
+from PIL import Image, ImageDraw, ImageFont
+
+from screenshot import encode_image, take_screenshot
 
 load_dotenv()
 
@@ -30,19 +30,6 @@ Return the bounding box using the <box> format with coordinates normalized to 0-
 <box>(x1,y1),(x2,y2)</box>
 
 Do not add any explanation, just the <box> tag."""
-
-
-def take_screenshot() -> Image.Image:
-    print("Taking screenshot...")
-    img = ImageGrab.grab(all_screens=False)
-    print(f"Captured {img.size[0]}x{img.size[1]} screenshot")
-    return img
-
-
-def encode_image(img: Image.Image) -> str:
-    buf = io.BytesIO()
-    img.save(buf, format="PNG")
-    return base64.b64encode(buf.getvalue()).decode()
 
 
 def call_qwen(img: Image.Image, query: str) -> dict:
@@ -121,7 +108,7 @@ def parse_coords(text: str, img_w: int, img_h: int) -> dict:
         x1, y1, x2, y2 = [int(v) for v in bbox_match.groups()]
         return clamp_coords({"x1": x1, "y1": y1, "x2": x2, "y2": y2}, img_w, img_h)
 
-    # Strategy 4: Qwen box format <box>(x1,y1),(x2,y2)</box> — normalized 0-1000
+    # Strategy 4: box format <box>(x1,y1),(x2,y2)</box> — normalized 0-1000
     box_match = re.search(r'<box>\((\d+),(\d+)\),\((\d+),(\d+)\)</box>', text)
     if box_match:
         vals = [int(v) for v in box_match.groups()]
@@ -132,7 +119,7 @@ def parse_coords(text: str, img_w: int, img_h: int) -> dict:
             "y2": int(vals[3] / 1000 * img_h),
         }, img_w, img_h)
 
-    # Strategy 4: look for 4 numbers in sequence
+    # Strategy 5: look for 4 numbers in sequence
     nums = re.findall(r'(\d+\.?\d*)', text)
     if len(nums) >= 4:
         vals = [float(v) for v in nums[:4]]
@@ -211,7 +198,7 @@ def draw_result(img: Image.Image, coords: dict, query: str) -> str:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Test Qwen visual grounding via OpenRouter")
+    parser = argparse.ArgumentParser(description="Test visual grounding via OpenRouter")
     parser.add_argument("query", help='Element to locate, e.g. "search bar"')
     parser.add_argument("-i", "--image", help="Path to screenshot (default: capture screen)", default=None)
     parser.add_argument("-d", "--delay", type=float, default=0, help="Seconds to wait before capturing")
@@ -228,6 +215,7 @@ def main():
             print(f"Waiting {args.delay}s...")
             time.sleep(args.delay)
         img = take_screenshot()
+        print(f"Captured {img.size[0]}x{img.size[1]} screenshot")
 
     coords = call_qwen(img, args.query)
     print(f"Bounding box: ({coords['x1']}, {coords['y1']}) \u2192 ({coords['x2']}, {coords['y2']})")

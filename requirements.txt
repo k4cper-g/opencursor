@@ -2,3 +2,7 @@ openai>=1.0.0
 pillow>=10.0.0
 python-dotenv>=1.0.0
 pyautogui>=0.9.54
+
+# Optional — install only for the model adapters you use:
+# pip install anthropic        # for --model claude
+# pip install google-generativeai  # for future Google AI direct support
