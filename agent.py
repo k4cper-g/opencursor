@@ -14,7 +14,7 @@ from debug_session import DebugSession
 from adapters import get_adapter
 from events import AgentEvent, AgentEventBus, EventType
 from prompts import build_system_prompt
-from screenshot import take_screenshot
+from screenshot import take_screenshot, screenshots_are_similar
 
 
 def run_agent(goal: str, config: dict, event_bus: AgentEventBus | None = None):
@@ -96,6 +96,10 @@ def run_agent(goal: str, config: dict, event_bus: AgentEventBus | None = None):
     # Text-based action log replaces screenshot history
     action_log: list[str] = []
 
+    # Loop detection: track consecutive unchanged screenshots
+    prev_img = img
+    unchanged_count = 0
+
     # Token / cost accumulator
     totals = {"prompt": 0, "completion": 0, "cost": 0.0, "steps": 0}
 
@@ -125,6 +129,21 @@ def run_agent(goal: str, config: dict, event_bus: AgentEventBus | None = None):
         user_text = f"Goal: {goal}"
         if action_log:
             user_text += "\n\nCompleted actions:\n" + "\n".join(action_log)
+
+        # Loop detection: warn the model when the screen hasn't changed
+        if unchanged_count >= 2:
+            print(f"  ⚠ Screen unchanged for {unchanged_count} consecutive actions")
+            user_text += (
+                f"\n\n⚠ WARNING: The screen has NOT changed for {unchanged_count} "
+                f"consecutive actions. Your recent actions had no visible effect. "
+                f"You MUST try a completely different approach — for example:\n"
+                f"- Use double_click instead of click\n"
+                f"- Try a keyboard shortcut (e.g. Enter to play, Space to toggle)\n"
+                f"- Click a different UI element (e.g. a play button instead of the track name)\n"
+                f"- Scroll to reveal new elements\n"
+                f"Do NOT repeat the same action again."
+            )
+
         user_text += "\n\nHere is the current screenshot. What is your next action?"
 
         # Call model (adapter handles API specifics, parsing, retries)
@@ -264,6 +283,16 @@ def run_agent(goal: str, config: dict, event_bus: AgentEventBus | None = None):
         img = take_screenshot()
         w, h = img.size
         emit(EventType.STEP_SCREENSHOT_TAKEN, step=step, screenshot=img, width=w, height=h)
+
+        # Loop detection: compare with previous screenshot
+        if screenshots_are_similar(prev_img, img):
+            unchanged_count += 1
+            # Annotate the most recent action log entry
+            if action_log and not action_log[-1].endswith("[screen unchanged]"):
+                action_log[-1] += "  [screen unchanged]"
+        else:
+            unchanged_count = 0
+        prev_img = img
 
     else:
         print(f"\n*** Reached max steps ({max_steps}) without completion ***")

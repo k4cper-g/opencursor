@@ -113,6 +113,9 @@ the top-right corner of the settings panel" not just "settings").
 {coordinate_instructions}\
 - For hotkey, separate keys with + (e.g. ctrl+shift+s, alt+f4, enter).
 - Only use sequences for blind-safe chains. When in doubt, use a single action.
+- If your previous action did not change the screen, do NOT repeat it. Try a \
+fundamentally different approach (different action type, different element, or \
+a keyboard shortcut). Check the action log for "[screen unchanged]" annotations.
 - Do not explain anything outside the XML tags.
 {extra_rules}"""
 
